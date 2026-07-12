@@ -4,6 +4,10 @@
 
 Track the lineage of fine-tuned models like a breeder tracks bloodlines. Every checkpoint, every merge, every fine-tune — recorded as a breeding record with full provenance.
 
+## Philosophy
+
+Part of [Working Animal Architecture](https://github.com/SuperInstance/AI-Writings) — treating AI models as working animal breeds, not black boxes. The core equation is **γ + η = C** (genome + nurture = capability). Lineage tracking is the **γ** — the genome, the bloodline record that makes selective breeding possible.
+
 ## Features
 
 - **Breeding Records** — Log every fine-tune event with parent(s), child, method, and metadata
