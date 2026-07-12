@@ -182,6 +182,138 @@ For more on the breeding paradigm in AI, see [AI-Writings](https://github.com/Su
 | [baton](https://github.com/SuperInstance/baton) | Generational handoff (carries lessons between lineage generations) |
 | [vetcheck](https://github.com/SuperInstance/vetcheck) | Health monitoring for registered models |
 
+
+
+## Lineage Tracker vs Pedigree: When to Use Which
+
+Both [Lineage Tracker](https://github.com/SuperInstance/lineage-tracker) and [Pedigree](https://github.com/SuperInstance/pedigree) track model ancestry. They overlap but serve different primary use cases:
+
+| Concern | Lineage Tracker | Pedigree |
+|---------|----------------|----------|
+| **Primary focus** | Provenance records | Bloodline analysis |
+| **Data model** | Flat breeding records with metadata | Genealogical tree with sire/dam |
+| **Inbreeding detection** | No (recommendations based on trait diversity) | Yes (Wright's coefficient of relationship) |
+| **Visualization** | Programmatic queries | ASCII trees + GraphViz DOT export |
+| **Trait comparison** | Yes (compare generations side-by-side) | Limited |
+| **Breeding method tracking** | Rich metadata (LoRA rank, LR, epochs, merge strategy) | Basic method tags |
+| **Best for** | MLOps: "what happened in this fine-tune chain?" | Research: "is this merge genetically safe?" |
+
+**Use Lineage Tracker when** you need audit trails for production models — what was trained on what, with what hyperparameters, and what the benchmark impact was. The metadata-rich records are designed for compliance and debugging.
+
+**Use Pedigree when** you need genetic analysis — inbreeding coefficients before merging, diversity scoring for outcross recommendations, and publication-quality lineage trees. The sire/dam model maps cleanly to how animal breeders think about bloodlines.
+
+**Use both when** you're running a serious breeding program. Lineage Tracker records the events; Pedigree analyzes the bloodline. Export from one, import to the other.
+
+## Advanced Scenario: Debugging a Capability Regression
+
+```python
+from lineage_tracker import LineageTracker
+
+tracker = LineageTracker("lineage.json")
+
+# Your production model suddenly can't do math
+# Trace its ancestry to find the culprit
+lineage = tracker.get_lineage("prod-model-v7")
+
+print("Ancestry chain:")
+for gen in lineage:
+    model = gen.model
+    gsm8k = model.traits.get("gsm8k", "N/A")
+    print(f"  Gen {gen.generation}: {model.name}@{model.version}")
+    print(f"    gsm8k: {gsm8k}")
+    print(f"    method: {gen.breeding_method if hasattr(gen, 'breeding_method') else 'unknown'}")
+
+# Output reveals:
+#   Gen 0: base-llama-3-70b         gsm8k: 82.1  (baseline)
+#   Gen 1: instruct-sft-v3          gsm8k: 79.4  (-2.7 after SFT)
+#   Gen 2: creative-merge-v1        gsm8k: 71.2  (-8.2 after merge!)  ← CULPRIT
+#   Gen 3: prod-model-v7            gsm8k: 68.9  (-2.3 after continued training)
+
+# The merge at Gen 2 caused the regression
+# Now check what was merged:
+records = [r for r in tracker.get_all_models() if "creative-merge" in r.name]
+for r in records:
+    print(f"  {r.name}: parents={r.parent_ids}, traits={r.traits}")
+```
+
+## Multi-Generation Breeding Program
+
+```python
+from lineage_tracker import LineageTracker
+
+tracker = LineageTracker("breeding-program.json")
+
+# Generation 0: Foundation
+tracker.record_breeding(
+    parents=["llama-3-70b"],
+    child_name="domain-base-v1",
+    method="continue_pretrain",
+    metadata={"dataset": "domain_corpus_v1", "tokens": "5B"},
+    child_traits={"mmlu": 80.1, "domain_eval": 72.0},
+)
+
+# Generation 1: Specialization
+tracker.record_breeding(
+    parents=["domain-base-v1"],
+    child_name="domain-instruct-v1",
+    method="sft",
+    metadata={"dataset": "instruct_v2", "epochs": 3, "lr": 2e-5},
+    child_traits={"mmlu": 81.2, "domain_eval": 78.5, "if_eval": 84.0},
+)
+
+# Generation 1: Alternative specialization (different focus)
+tracker.record_breeding(
+    parents=["domain-base-v1"],
+    child_name="domain-reasoning-v1",
+    method="rlhf",
+    metadata={"reward_model": "rm-v2", "kl_coef": 0.1},
+    child_traits={"mmlu": 82.0, "domain_eval": 75.0, "gsm8k": 85.1},
+)
+
+# Generation 2: Merge the best of both specializations
+tracker.record_breeding(
+    parents=["domain-instruct-v1", "domain-reasoning-v1"],
+    child_name="domain-merged-v2",
+    method="merge",
+    metadata={"strategy": "SLERP", "ratio": "0.5"},
+    child_traits={"mmlu": 83.1, "domain_eval": 79.0, "gsm8k": 84.2, "if_eval": 83.5},
+)
+
+# Query the full program
+print(f"Total models tracked: {len(tracker.get_all_models())}")
+for model in tracker.get_all_models():
+    print(f"  {model.name}@{model.version}: {model.traits}")
+```
+
+## Export for Pedigree Analysis
+
+```python
+from lineage_tracker import LineageTracker
+
+tracker = LineageTracker("lineage.json")
+
+# Export to a format Pedigree can consume
+import json
+
+models = tracker.get_all_models()
+export = {"models": {}, "breeding_records": []}
+
+for model in models:
+    export["models"][f"{model.name}@{model.version}"] = {
+        "name": model.name,
+        "version": model.version,
+        "traits": model.traits or {},
+        "checksum": getattr(model, "checksum", None),
+    }
+
+with open("pedigree_import.json", "w") as f:
+    json.dump(export, f, indent=2)
+
+# Then in Pedigree:
+# p = Pedigree("pedigree_import.json")
+# p.check_inbreeding("domain-instruct-v1", "domain-reasoning-v1")
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
