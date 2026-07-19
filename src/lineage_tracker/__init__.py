@@ -2,7 +2,7 @@
 
 from .model import Model, Generation, BreedingRecord
 from .store import LineageStore
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import hashlib
 
@@ -51,6 +51,13 @@ class LineageTracker:
         if not parents:
             raise ValueError("At least one parent is required")
 
+        # Validate model names don't contain '@' (used as separator in references)
+        if "@" in child_name:
+            raise ValueError("Model names cannot contain '@' character")
+        for pname in parents:
+            if "@" in pname:
+                raise ValueError("Model names cannot contain '@' character")
+
         # Resolve parent models
         parent_models = []
         for pname in parents:
@@ -84,7 +91,7 @@ class LineageTracker:
             parents=[f"{pm.name}@{pm.version}" for pm in parent_models],
             child=f"{child.name}@{child.version}",
             method=method,
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             metadata=metadata or {},
             generation=child_gen,
         )
@@ -125,7 +132,11 @@ class LineageTracker:
             ))
             return
 
-        gen = self.store.get_generation(model.name, model.version) or depth
+        # Get stored generation, or 0 for auto-registered root models,
+        # or depth for completely unknown models
+        gen = self.store.get_generation(model.name, model.version)
+        if gen is None:
+            gen = 0 if model.version == "unknown" else depth
         result.append(Generation(model=model, generation=gen))
 
         # Find direct parents
@@ -202,7 +213,7 @@ class LineageTracker:
 
         target_lineage = {g.model.name for g in self.get_lineage(model_name)}
 
-        candidates = pool or [
+        candidates = pool if pool is not None else [
             m.name for m in self.store.get_all_models() if m.name != model_name
         ]
 

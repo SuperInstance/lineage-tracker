@@ -48,10 +48,13 @@ class LineageStore:
         return f"{name}@{version}"
 
     def get_model(self, name: str) -> Model | None:
-        """Look up a model by name (returns latest version if multiple)."""
+        """Look up a model by name (returns latest version if multiple).
+
+        Latest is determined by most recently added (insertion order).
+        """
         data = self._load()
-        # Try exact match first, then latest version
-        for key, mdata in data["models"].items():
+        # Iterate in reverse to get most recently added version first
+        for key, mdata in reversed(list(data["models"].items())):
             if key.startswith(f"{name}@"):
                 return Model(**mdata)
         return None

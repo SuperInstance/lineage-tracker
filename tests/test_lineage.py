@@ -229,3 +229,56 @@ class TestDataclasses:
         g = Generation(model=m, generation=3)
         assert g.generation == 3
         assert g.model.name == "x"
+
+
+class TestBugFixes:
+    """Regression tests for bugs found during audit v0.1.1."""
+
+    def test_reject_at_symbol_in_model_names(self, tracker):
+        """Bug: @ character in model names broke name@version parsing."""
+        with pytest.raises(ValueError, match="cannot contain"):
+            tracker.record_breeding(parents=["model@bad"], child_name="child")
+        with pytest.raises(ValueError, match="cannot contain"):
+            tracker.record_breeding(parents=["parent"], child_name="child@bad")
+
+    def test_pool_parameter_respects_empty_list(self, tracker):
+        """Bug: pool=[] used default instead of respecting empty list."""
+        tracker.record_breeding(parents=["root"], child_name="A", child_version="1.0")
+        tracker.record_breeding(parents=["root"], child_name="B", child_version="1.0")
+        # Empty pool should return empty list, not default candidates
+        recs = tracker.recommend_breeding("A", pool=[])
+        assert len(recs) == 0
+
+    def test_generation_calculation_for_root_models(self, tracker):
+        """Bug: auto-registered root models got incorrect generation values."""
+        tracker.record_breeding(parents=["root"], child_name="A", child_version="1.0")
+        tracker.record_breeding(parents=["A"], child_name="B", child_version="1.0")
+
+        lineage = tracker.get_lineage("B")
+        generations = {g.model.name: g.generation for g in lineage}
+
+        # Root should have generation 0 (not 2 which was the bug)
+        assert generations.get("root") == 0, f"Expected 0, got {generations.get('root')}"
+        assert generations.get("A") == 1
+        assert generations.get("B") == 2
+
+    def test_get_model_returns_latest_version(self, tracker):
+        """Bug: get_model returned first version instead of latest."""
+        tracker.record_breeding(parents=["root"], child_name="model", child_version="1.0")
+        tracker.record_breeding(parents=["root"], child_name="model", child_version="2.0")
+        tracker.record_breeding(parents=["root"], child_name="model", child_version="3.0")
+
+        model = tracker.store.get_model("model")
+        assert model.version == "3.0", "Should return latest (most recently added) version"
+
+    def test_timestamp_format_is_valid(self, tracker):
+        """Verify timestamp uses non-deprecated datetime API."""
+        tracker.record_breeding(parents=["root"], child_name="A", child_version="1.0")
+        records = tracker.list_breeding_records()
+        timestamp = records[0].timestamp
+        # Should end with Z (UTC marker) not +00:00
+        assert timestamp.endswith("Z"), f"Timestamp should end with Z, got {timestamp}"
+        # Should be parseable
+        from datetime import datetime
+        parsed = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        assert parsed is not None
