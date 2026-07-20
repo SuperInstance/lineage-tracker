@@ -143,7 +143,7 @@ class LineageTracker:
 
         # Find direct parents
         for record in self.store.get_all_breeding_records():
-            if record.child.split("@")[0] == model_name:
+            if record.child.split("@")[0] == model_name or record.child == model_name:
                 for parent_ref in record.parents:
                     parent_name = parent_ref.split("@")[0]
                     self._trace_lineage(parent_name, result, visited, depth + 1)

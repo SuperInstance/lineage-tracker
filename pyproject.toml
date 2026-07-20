@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "si-lineage-tracker"
-version = "0.1.2"
+version = "0.1.3"
 description = "Fine-tune provenance as bloodline records"
 readme = "README.md"
 license = {text = "MIT"}
