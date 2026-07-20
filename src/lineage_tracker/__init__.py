@@ -77,7 +77,9 @@ class LineageTracker:
         child_gen = max_gen + 1
 
         # Create child model
-        checksum_input = f"{child_name}:{child_version}:{':'.join(parents)}"
+        # Include parent versions in checksum for true provenance uniqueness
+        parent_refs = [f"{pm.name}@{pm.version}" for pm in parent_models]
+        checksum_input = f"{child_name}:{child_version}:{':'.join(parent_refs)}"
         checksum = hashlib.sha256(checksum_input.encode()).hexdigest()[:16]
         child = Model(
             name=child_name,
